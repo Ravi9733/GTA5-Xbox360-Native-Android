@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
 import android.view.Gravity;
+import java.io.InputStream;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -124,14 +125,14 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     }
 
     private void checkGameFolder(Uri treeUri) {
-        boolean defaultXex = false;
-        boolean xbox360Rpf = false;
+        Uri defaultXexUri = null;
+        Uri xbox360RpfUri = null;
         int visited = 0;
         ArrayDeque<String> pending = new ArrayDeque<>();
         Set<String> seen = new HashSet<>();
         try {
             pending.add(DocumentsContract.getTreeDocumentId(treeUri));
-            while (!pending.isEmpty() && visited < 12000 && !(defaultXex && xbox360Rpf)) {
+            while (!pending.isEmpty() && visited < 12000 && (defaultXexUri == null || xbox360RpfUri == null)) {
                 String parentId = pending.removeFirst();
                 if (!seen.add(parentId)) continue;
                 Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId);
@@ -148,26 +149,28 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
                         String mime = cursor.getString(2);
                         if (name != null) {
                             String normalized = name.toLowerCase(Locale.ROOT);
-                            if (normalized.equals("default.xex")) defaultXex = true;
-                            if (normalized.equals("xbox360.rpf")) xbox360Rpf = true;
+                            if (normalized.equals("default.xex")) defaultXexUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, id);
+                            if (normalized.equals("xbox360.rpf")) xbox360RpfUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, id);
                         }
                         if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)
                                 && !seen.contains(id) && pending.size() < 12000) {
                             pending.addLast(id);
                         }
-                        if (defaultXex && xbox360Rpf) break;
+                        if (defaultXexUri != null && xbox360RpfUri != null) break;
                     }
                 }
             }
-            final boolean hasXex = defaultXex;
-            final boolean hasRpf = xbox360Rpf;
+            final boolean hasXex = defaultXexUri != null;
+            final boolean hasRpf = xbox360RpfUri != null;
+            final String xexCheck = inspectMagic(defaultXexUri, new byte[]{'X','E','X','2'});
+            final String rpfCheck = inspectMagic(xbox360RpfUri, new byte[]{'R','P','F','7'});
             final int scanned = visited;
             runOnUiThread(() -> {
                 String report = "Folder scan: " + scanned + " entries checked\n"
-                        + "default.xex: " + (hasXex ? "found" : "not found") + "\n"
-                        + "xbox360.rpf: " + (hasRpf ? "found" : "not found");
+                        + "default.xex: " + (hasXex ? xexCheck : "not found") + "\n"
+                        + "xbox360.rpf: " + (hasRpf ? rpfCheck : "not found");
                 if (hasXex && hasRpf) {
-                    report += "\nRequired-file names found. This app does not yet load or run the game.";
+                    report += "\nHeader checks completed. This app does not yet load or run the game.";
                 } else if (scanned >= 12000) {
                     report += "\nScan limit reached; select a folder closer to the extracted game root.";
                 } else {
@@ -178,6 +181,28 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         } catch (Exception ex) {
             runOnUiThread(() -> gameFilesView.setText(
                     "Could not read this folder. Re-select it and allow access.\n" + ex.getClass().getSimpleName()));
+        }
+    }
+
+    // Read bytes through Android's document provider; a SAF URI is not a POSIX path.
+    private String inspectMagic(Uri documentUri, byte[] expected) {
+        if (documentUri == null) return "not found";
+        try (InputStream in = getContentResolver().openInputStream(documentUri)) {
+            if (in == null) return "found, unreadable";
+            byte[] header = new byte[expected.length];
+            int offset = 0;
+            while (offset < header.length) {
+                int count = in.read(header, offset, header.length - offset);
+                if (count < 0) break;
+                offset += count;
+            }
+            if (offset != expected.length) return "found, too short to validate";
+            for (int i = 0; i < expected.length; i++) {
+                if (header[i] != expected[i]) return "readable, unexpected header";
+            }
+            return "readable, header OK";
+        } catch (Exception ex) {
+            return "found, read failed (" + ex.getClass().getSimpleName() + ")";
         }
     }
 
