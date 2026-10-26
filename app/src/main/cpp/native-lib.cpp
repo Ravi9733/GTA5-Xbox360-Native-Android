@@ -223,6 +223,14 @@ bool createSwapchainObjects(std::string& error) {
     if (r != VK_SUCCESS) { error = resultText("vkCreateFence", r); return false; }
     return true;
 }
+
+bool recreateSwapchainLocked() {
+    if (g_device == VK_NULL_HANDLE || g_surface == VK_NULL_HANDLE) return false;
+    if (vkDeviceWaitIdle(g_device) != VK_SUCCESS) return false;
+    destroySwapchainObjects();
+    std::string error;
+    return createSwapchainObjects(error);
+}
 }
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -318,7 +326,10 @@ Java_com_gta5_nativeandroid_MainActivity_nativeRenderFrame(JNIEnv* /* env */, jo
     if (r != VK_SUCCESS) return JNI_FALSE;
     uint32_t imageIndex = 0;
     r = vkAcquireNextImageKHR(g_device, g_swapchain, UINT64_MAX, g_acquired, VK_NULL_HANDLE, &imageIndex);
-    if (r == VK_ERROR_OUT_OF_DATE_KHR) return JNI_FALSE;
+    if (r == VK_ERROR_OUT_OF_DATE_KHR) {
+        recreateSwapchainLocked();
+        return JNI_FALSE;
+    }
     if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR) return JNI_FALSE;
     vkResetFences(g_device, 1, &g_frameFence);
     VkCommandBuffer cmd = g_commands[imageIndex];
@@ -360,7 +371,11 @@ Java_com_gta5_nativeandroid_MainActivity_nativeRenderFrame(JNIEnv* /* env */, jo
     present.pSwapchains = &g_swapchain;
     present.pImageIndices = &imageIndex;
     r = vkQueuePresentKHR(g_graphicsQueue, &present);
-    return (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR) ? JNI_TRUE : JNI_FALSE;
+    if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) {
+        recreateSwapchainLocked();
+        return JNI_FALSE;
+    }
+    return r == VK_SUCCESS ? JNI_TRUE : JNI_FALSE;
 }
 extern "C" JNIEXPORT void JNICALL
 Java_com_gta5_nativeandroid_MainActivity_nativeShutdownVulkan(JNIEnv*, jobject) {
