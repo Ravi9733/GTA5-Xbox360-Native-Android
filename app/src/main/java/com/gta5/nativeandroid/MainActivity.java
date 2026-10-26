@@ -32,6 +32,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private TextView gameFilesView;
     private volatile boolean renderRequested;
     private Thread renderThread;
+    private SurfaceHolder surfaceHolder;
 
     private native String nativeBuildStatus();
     private native String nativeInitVulkan(Surface surface);
@@ -181,10 +182,16 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     }
 
     @Override
-    public void surfaceCreated(SurfaceHolder holder) { }
+    public void surfaceCreated(SurfaceHolder holder) { surfaceHolder = holder; }
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+        surfaceHolder = holder;
+        initializeSurface(holder);
+    }
+
+    private void initializeSurface(SurfaceHolder holder) {
+        if (holder == null || !holder.getSurface().isValid()) return;
         stopRenderLoop();
         nativeShutdownVulkan();
         String status = nativeInitVulkan(holder.getSurface());
@@ -221,9 +228,16 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
+        surfaceHolder = null;
         stopRenderLoop();
         nativeShutdownVulkan();
         if (statusView != null) statusView.setText("Android surface closed. Vulkan resources released.");
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (surfaceHolder != null) initializeSurface(surfaceHolder);
     }
 
     @Override
