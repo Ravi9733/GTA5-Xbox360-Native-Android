@@ -32,15 +32,18 @@ The upstream build guide asks for the user's own legally acquired game files, in
 
 - Android Gradle app targeting `arm64-v8a`.
 - JNI/C++ shared-library target.
-- CI workflow for a debug APK.
+- Vulkan instance creation and Android `Surface` creation.
+- Vulkan physical-device discovery, graphics + presentation queue selection, logical-device creation, and surface format/present-mode capability queries.
+- CI workflow successfully built and uploaded a debug APK artifact for the Vulkan surface probe.
 - CI setup fix: the Android setup action was trying to install the removed SDK package named `tools`; the workflow now requests `platform-tools` only before installing explicit SDK/NDK packages.
 
 ## Next order of work
 
-1. Get the foundation CI build green.
-2. Create a separate Android-native platform target and resolve NDK dependency builds without breaking desktop upstream.
-3. Add Android Vulkan surface/lifecycle and input/audio adapters.
-4. Integrate upstream source in a license-compliant way, preserving upstream attribution and isolating Android patches.
-5. Test against a legally owned game dump; only then describe any game functionality as working.
+1. Keep the ARM64 foundation build green in CI.
+2. Add a Vulkan swapchain, frame synchronization, and a minimal clear/present loop on the Android surface.
+3. Create a separate Android-native platform target and resolve NDK dependency builds without breaking desktop upstream.
+4. Add Android lifecycle, touch/controller input, audio, and game-file access adapters.
+5. Integrate upstream recompilation code in a license-compliant way, preserving attribution and isolating Android patches.
+6. Test against a legally owned game dump; only then describe any game functionality as working.
 
 No emulator is part of this plan. No APK should be advertised as a playable GTA V port until that has actually been demonstrated.
