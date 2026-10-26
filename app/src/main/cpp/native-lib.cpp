@@ -331,7 +331,6 @@ Java_com_gta5_nativeandroid_MainActivity_nativeRenderFrame(JNIEnv* /* env */, jo
         return JNI_FALSE;
     }
     if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR) return JNI_FALSE;
-    vkResetFences(g_device, 1, &g_frameFence);
     VkCommandBuffer cmd = g_commands[imageIndex];
     vkResetCommandBuffer(cmd, 0);
     VkCommandBufferBeginInfo bi{};
@@ -352,6 +351,7 @@ Java_com_gta5_nativeandroid_MainActivity_nativeRenderFrame(JNIEnv* /* env */, jo
     vkCmdBeginRenderPass(cmd, &rbi, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndRenderPass(cmd);
     if (vkEndCommandBuffer(cmd) != VK_SUCCESS) return JNI_FALSE;
+    if (vkResetFences(g_device, 1, &g_frameFence) != VK_SUCCESS) return JNI_FALSE;
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit{};
     submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -362,7 +362,10 @@ Java_com_gta5_nativeandroid_MainActivity_nativeRenderFrame(JNIEnv* /* env */, jo
     submit.pCommandBuffers = &cmd;
     submit.signalSemaphoreCount = 1;
     submit.pSignalSemaphores = &g_rendered[imageIndex];
-    if (vkQueueSubmit(g_graphicsQueue, 1, &submit, g_frameFence) != VK_SUCCESS) return JNI_FALSE;
+    if (vkQueueSubmit(g_graphicsQueue, 1, &submit, g_frameFence) != VK_SUCCESS) {
+        recreateSwapchainLocked();
+        return JNI_FALSE;
+    }
     VkPresentInfoKHR present{};
     present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     present.waitSemaphoreCount = 1;
