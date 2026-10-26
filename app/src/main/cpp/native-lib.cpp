@@ -26,7 +26,7 @@ std::vector<VkFramebuffer> g_framebuffers;
 VkCommandPool g_commandPool = VK_NULL_HANDLE;
 std::vector<VkCommandBuffer> g_commands;
 VkSemaphore g_acquired = VK_NULL_HANDLE;
-VkSemaphore g_rendered = VK_NULL_HANDLE;
+std::vector<VkSemaphore> g_rendered;
 VkFence g_frameFence = VK_NULL_HANDLE;
 
 std::string resultText(const char* stage, VkResult result) {
@@ -45,7 +45,7 @@ void destroySwapchainObjects() {
     if (g_device != VK_NULL_HANDLE) {
         if (g_frameFence) vkDestroyFence(g_device, g_frameFence, nullptr);
         if (g_acquired) vkDestroySemaphore(g_device, g_acquired, nullptr);
-        if (g_rendered) vkDestroySemaphore(g_device, g_rendered, nullptr);
+        for (auto semaphore : g_rendered) if (semaphore) vkDestroySemaphore(g_device, semaphore, nullptr);
         if (g_commandPool) vkDestroyCommandPool(g_device, g_commandPool, nullptr);
         for (auto fb : g_framebuffers) vkDestroyFramebuffer(g_device, fb, nullptr);
         if (g_renderPass) vkDestroyRenderPass(g_device, g_renderPass, nullptr);
@@ -53,7 +53,8 @@ void destroySwapchainObjects() {
         if (g_swapchain) vkDestroySwapchainKHR(g_device, g_swapchain, nullptr);
     }
     g_frameFence = VK_NULL_HANDLE;
-    g_acquired = g_rendered = VK_NULL_HANDLE;
+    g_acquired = VK_NULL_HANDLE;
+    g_rendered.clear();
     g_commandPool = VK_NULL_HANDLE;
     g_framebuffers.clear();
     g_commands.clear();
@@ -208,9 +209,12 @@ bool createSwapchainObjects(std::string& error) {
     if (r != VK_SUCCESS) { error = resultText("vkAllocateCommandBuffers", r); return false; }
     VkSemaphoreCreateInfo sem{};
     sem.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    if ((r = vkCreateSemaphore(g_device, &sem, nullptr, &g_acquired)) != VK_SUCCESS ||
-        (r = vkCreateSemaphore(g_device, &sem, nullptr, &g_rendered)) != VK_SUCCESS) {
-        error = resultText("vkCreateSemaphore", r); return false;
+    r = vkCreateSemaphore(g_device, &sem, nullptr, &g_acquired);
+    if (r != VK_SUCCESS) { error = resultText("vkCreateSemaphore", r); return false; }
+    g_rendered.resize(actualCount, VK_NULL_HANDLE);
+    for (auto& semaphore : g_rendered) {
+        r = vkCreateSemaphore(g_device, &sem, nullptr, &semaphore);
+        if (r != VK_SUCCESS) { error = resultText("vkCreateSemaphore", r); return false; }
     }
     VkFenceCreateInfo fence{};
     fence.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -346,12 +350,12 @@ Java_com_gta5_nativeandroid_MainActivity_nativeRenderFrame(JNIEnv* /* env */, jo
     submit.commandBufferCount = 1;
     submit.pCommandBuffers = &cmd;
     submit.signalSemaphoreCount = 1;
-    submit.pSignalSemaphores = &g_rendered;
+    submit.pSignalSemaphores = &g_rendered[imageIndex];
     if (vkQueueSubmit(g_graphicsQueue, 1, &submit, g_frameFence) != VK_SUCCESS) return JNI_FALSE;
     VkPresentInfoKHR present{};
     present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     present.waitSemaphoreCount = 1;
-    present.pWaitSemaphores = &g_rendered;
+    present.pWaitSemaphores = &g_rendered[imageIndex];
     present.swapchainCount = 1;
     present.pSwapchains = &g_swapchain;
     present.pImageIndices = &imageIndex;
