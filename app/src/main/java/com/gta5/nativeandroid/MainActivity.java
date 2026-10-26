@@ -8,7 +8,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
 import android.view.Gravity;
-import java.io.InputStream;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -184,19 +183,15 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         }
     }
 
-    // Read bytes through Android's document provider; a SAF URI is not a POSIX path.
+    // Validate through the same seekable SAF abstraction intended for the future filesystem bridge.
+    // A SAF Uri is not a POSIX path, and this header check still does not load or mount the game.
     private String inspectMagic(Uri documentUri, byte[] expected) {
         if (documentUri == null) return "not found";
-        try (InputStream in = getContentResolver().openInputStream(documentUri)) {
-            if (in == null) return "found, unreadable";
+        try (SafRandomAccessFile file = SafRandomAccessFile.open(getContentResolver(), documentUri)) {
+            if (file.length() < expected.length) return "found, too short to validate";
             byte[] header = new byte[expected.length];
-            int offset = 0;
-            while (offset < header.length) {
-                int count = in.read(header, offset, header.length - offset);
-                if (count < 0) break;
-                offset += count;
-            }
-            if (offset != expected.length) return "found, too short to validate";
+            int count = file.readAt(0, header, 0, header.length);
+            if (count != expected.length) return "found, too short to validate";
             for (int i = 0; i < expected.length; i++) {
                 if (header[i] != expected[i]) return "readable, unexpected header";
             }
