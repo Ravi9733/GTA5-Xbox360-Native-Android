@@ -4,7 +4,7 @@ This repository is the Android-native development workspace for investigating a 
 
 ## Status
 
-**Early foundation only — not a playable GTA V port.** The app currently contains an Android ARM64/JNI foundation and a Vulkan instance + Android-surface smoke test. It does not execute the GTA V game engine, and it does not include an APK release advertised as a playable game.
+**Early foundation only — not a playable GTA V port.** The app currently contains an Android ARM64/JNI foundation, a Vulkan swapchain with a clear/present frame loop, Android surface lifecycle handling, and a persistent Storage Access Framework folder picker for checking a user-owned game dump. It does not execute the GTA V game engine, and it does not include an APK release advertised as a playable game.
 
 This is **not an emulator**. The purpose is to develop an Android-native platform target for static-recompiled game code.
 
@@ -20,7 +20,9 @@ See [the Android porting audit](docs/ANDROID_PORTING_AUDIT.md) for concrete bloc
 
 - Android Gradle app targeting `arm64-v8a`
 - Android NDK C++ JNI shared library
-- Vulkan loader / physical-device enumeration / Android surface probe
+- Vulkan loader, Android surface, swapchain, command buffers, render pass, frame synchronization and clear/present loop
+- Surface resize/out-of-date recovery and Activity pause/resume handling
+- Persistent Android folder picker and read-only scan for `default.xex` / `xbox360.rpf` names
 - GitHub Actions workflow that builds a debug APK and uploads it as an artifact
 - Porting audit for Android platform, renderer, audio, storage and game-code integration
 - No proprietary game assets or executable files
@@ -34,11 +36,11 @@ Open the repository in Android Studio with Android SDK and NDK installed, or use
 ## Next engineering gates
 
 1. Keep the ARM64 native foundation building in CI.
-2. Turn the Vulkan surface probe into a real Android presentation/swapchain path.
+2. Turn the Vulkan clear/present path into a renderer that can draw the game's actual graphics.
 3. Build Android-compatible third-party dependencies and isolate desktop-only dependencies from the Android target.
 4. Integrate upstream recompilation code in a license-compliant way, preserving attribution and keeping Android patches separate.
 5. Add Android game-file access for a legally owned dump and verify required files without uploading them to this repository.
-6. Test with the user's own legally acquired game files on a physical Android device.
+6. Connect the Android folder access layer to the game's file system and test with legally owned game files on a physical Android device.
 
 A successful starter APK or Vulkan probe is **not** proof that GTA V runs. The game engine, renderer, audio, controls, file handling and game-specific fixes still need to be integrated and tested.
 
