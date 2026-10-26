@@ -1,6 +1,6 @@
 # Android ARM64 porting audit
 
-**Current state:** the repository has an Android/JNI foundation with a Vulkan swapchain and clear/present loop, plus a persistent Android folder picker that checks for game-file names. It is not a playable game, and no GTA V executable or game assets are included.
+**Current state:** the repository has an Android/JNI foundation with a Vulkan swapchain and clear/present loop, plus a persistent Android folder picker that locates `default.xex` and `xbox360.rpf` and reads their four-byte headers through the Storage Access Framework. It is not a playable game, and no GTA V executable or game assets are included.
 
 ## Upstream examined
 
@@ -24,7 +24,7 @@ The upstream build guide asks for the user's own legally acquired game files, in
 2. **Platform/window/input:** an Android activity/window/surface path, Vulkan surface lifecycle handling, pause/resume, and persistent read-only Storage Access Framework folder selection now exist. Touch/controller input and connecting the selected document tree to the game file APIs remain unfinished.
 3. **Rendering:** Android Vulkan swapchain, command buffers, render pass, frame synchronization, clear/present, and out-of-date swapchain recreation are implemented as a smoke-test renderer. The GTA V renderer, Xenos shader conversion, shader caches, and actual game graphics are not integrated.
 4. **Audio:** replace or configure platform-specific audio dependencies for Android.
-5. **Filesystem:** a persistent folder picker scans for `default.xex` and `xbox360.rpf` names. It does not yet parse, mount, or feed those files to SanRecomp; complete game filesystem integration remains unfinished.
+5. **Filesystem:** a persistent folder picker locates `default.xex` and `xbox360.rpf`, opens each through `ContentResolver`, and checks the expected `XEX2` / `RPF7` magic bytes. This is a shallow header check only: it does not parse, mount, or feed those files to SanRecomp; complete game filesystem integration remains unfinished.
 6. **Game-specific correctness:** verify the generated PPC code, imports, memory layout, threading, GPU synchronization, save data and game patches on ARM64.
 7. **Testing:** build and launch on an actual Android device with user-supplied game files. A successful debug APK is only a foundation test, not proof the game runs.
 
@@ -42,7 +42,7 @@ The upstream build guide asks for the user's own legally acquired game files, in
 1. Keep the ARM64 foundation build green in CI.
 2. Add a Vulkan swapchain, frame synchronization, and a minimal clear/present loop on the Android surface.
 3. Create a separate Android-native platform target and resolve NDK dependency builds without breaking desktop upstream.
-4. Add Android lifecycle, touch/controller input, audio, and game-file access adapters.
+4. Add Android lifecycle, touch/controller input, audio, and a random-access filesystem adapter that bridges SAF document URIs to SanRecomp's expected file APIs.
 5. Integrate upstream recompilation code in a license-compliant way, preserving attribution and isolating Android patches.
 6. Test against a legally owned game dump; only then describe any game functionality as working.
 
