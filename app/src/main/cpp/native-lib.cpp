@@ -6,6 +6,7 @@
 
 #include <cstdio>
 #include <string>
+#include <vector>
 
 namespace {
 VkInstance g_instance = VK_NULL_HANDLE;
@@ -86,12 +87,16 @@ Java_com_gta5_nativeandroid_MainActivity_nativeInitVulkan(
         return env->NewStringUTF(message.c_str());
     }
 
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-    result = vkEnumeratePhysicalDevices(g_instance, &deviceCount, &physicalDevice);
-    if (result != VK_SUCCESS) {
+    std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
+    result = vkEnumeratePhysicalDevices(g_instance, &deviceCount, physicalDevices.data());
+    if (result != VK_SUCCESS || physicalDevices.empty()) {
         shutdownVulkan();
-        return env->NewStringUTF(resultText("vkEnumeratePhysicalDevices", result).c_str());
+        const std::string message = result != VK_SUCCESS
+                ? resultText("vkEnumeratePhysicalDevices", result)
+                : "Vulkan loader found no physical devices.";
+        return env->NewStringUTF(message.c_str());
     }
+    const VkPhysicalDevice physicalDevice = physicalDevices.front();
 
     VkAndroidSurfaceCreateInfoKHR surfaceInfo{};
     surfaceInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
