@@ -4,33 +4,44 @@ This repository is the Android-native development workspace for investigating a 
 
 ## Status
 
-**Early foundation only — this is not a playable GTA V port and does not contain an APK release yet.**
+**Early foundation only — not a playable GTA V port.** The app currently contains an Android ARM64/JNI foundation and a Vulkan instance + Android-surface smoke test. It does not execute the GTA V game engine, and it does not include an APK release advertised as a playable game.
 
-The first commit establishes an Android ARM64 app + JNI/C++ build path. It is not an emulator, and it does not run the game yet. The starter screen and native library are not the game engine.
+This is **not an emulator**. The purpose is to develop an Android-native platform target for static-recompiled game code.
 
 ## Upstream research
 
-The public SanRecomp project is an early static-recompilation project. Its public build files are desktop-oriented (CMake/vcpkg and platform-specific dependencies); Android/ARM64 is not currently a supported target in the checked-in build configuration. Porting it requires Android-specific work in the platform layer, renderer, audio, input, storage, and build/dependency setup. Upstream documentation should be rechecked before syncing code because README/build-guide descriptions may differ.
+Upstream project: https://github.com/OZORDI/SanRecomp
 
-- Upstream: https://github.com/OZORDI/SanRecomp
+SanRecomp's README identifies it as an early Xbox 360 GTA V static-recompilation project. Its generated PowerPC C++ code and GTA5 configuration are a potential starting point, but its checked-in application build is desktop-oriented and is not a drop-in Android target.
 
-## What is in this repository
+See [the Android porting audit](docs/ANDROID_PORTING_AUDIT.md) for concrete blockers and the planned order of work.
 
-- Android Gradle app targeting arm64-v8a
-- Android NDK C++ shared-library target (JNI)
-- GitHub Actions workflow that attempts to build a debug APK
+## Current repository contents
+
+- Android Gradle app targeting `arm64-v8a`
+- Android NDK C++ JNI shared library
+- Vulkan loader / physical-device enumeration / Android surface probe
+- GitHub Actions workflow that builds a debug APK and uploads it as an artifact
+- Porting audit for Android platform, renderer, audio, storage and game-code integration
 - No proprietary game assets or executable files
+
+## Build
+
+Open the repository in Android Studio with Android SDK and NDK installed, or use the GitHub Actions workflow. The workflow builds `app/build/outputs/apk/debug/app-debug.apk` and uploads it as an artifact if successful.
+
+[View build status and artifacts](https://github.com/Ravi9733/GTA5-Xbox360-Native-Android/actions)
 
 ## Next engineering gates
 
-1. Make the native Android starter build reproducibly in CI.
-2. Audit upstream source, license, actual GTA V code/data requirements, and dependencies.
-3. Design and implement Android platform backends rather than adding an emulator.
-4. Integrate compatible recompilation output only after the Android build path and required APIs are understood.
-5. Test with game files the user legally owns. A successful starter APK is **not** proof that GTA V runs.
+1. Keep the ARM64 native foundation building in CI.
+2. Turn the Vulkan surface probe into a real Android presentation/swapchain path.
+3. Build Android-compatible third-party dependencies and isolate desktop-only dependencies from the Android target.
+4. Integrate upstream recompilation code in a license-compliant way, preserving attribution and keeping Android patches separate.
+5. Add Android game-file access for a legally owned dump and verify required files without uploading them to this repository.
+6. Test with the user's own legally acquired game files on a physical Android device.
 
-## Build locally
+A successful starter APK or Vulkan probe is **not** proof that GTA V runs. The game engine, renderer, audio, controls, file handling and game-specific fixes still need to be integrated and tested.
 
-Open this repository in Android Studio with Android SDK and NDK installed, then build the app debug variant. CI is configured to run assembleDebug and upload the APK artifact if the build succeeds.
+## Game files and copyright
 
-**Important:** No Xbox 360 game files are included. Never commit default.xex, xbox360.rpf, or other copyrighted game data to this public repository.
+No Xbox 360 game files are included. Do not commit `default.xex`, `xbox360.rpf`, extracted game archives, or other copyrighted game data to this public repository. Use only a game dump you are legally entitled to use.
