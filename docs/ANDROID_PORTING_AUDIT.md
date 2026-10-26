@@ -18,6 +18,16 @@ The upstream top-level CMake configuration:
 
 The upstream build guide asks for the user's own legally acquired game files, including `default.xex` and `xbox360.rpf`, in `SanRecompLib/private/`. These must never be committed to this public repository.
 
+## Newly confirmed upstream blockers
+
+Inspection of the current upstream source confirms two additional hard blockers before Android runtime integration:
+
+- `SanRecompLib/CMakeLists.txt` explicitly disables GTA V shader extraction/recompilation and uses a stub `shader_cache.cpp`.
+- `SanRecomp/gpu/video.cpp` logs that GTA V shader extraction/recompilation has not been implemented and terminates if the shader cache is empty. Therefore, even a successful Android link would not imply the game can render.
+- The upstream runtime currently assembles SDL-specific audio and input sources and platform-specific OS source sets; Android needs deliberate backend selection or replacement, not just a JNI wrapper.
+
+These findings make shader extraction/conversion plus an Android-compatible renderer a prerequisite for claiming gameplay.
+
 ## Android blockers — not solved by compiling a wrapper
 
 1. **Build system:** replace desktop-only CMake assumptions and cross-compile compatible third-party dependencies with Android NDK/arm64-v8a.
