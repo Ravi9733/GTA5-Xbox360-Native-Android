@@ -16,14 +16,17 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     }
 
     private TextView statusView;
+    private volatile boolean renderRequested;
+    private Thread renderThread;
+
     private native String nativeBuildStatus();
     private native String nativeInitVulkan(Surface surface);
+    private native boolean nativeRenderFrame();
     private native void nativeShutdownVulkan();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setBackgroundColor(Color.rgb(20, 24, 28));
@@ -43,8 +46,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         statusView.setTextSize(15);
         statusView.setPadding(0, 24, 0, 24);
         statusView.setText(nativeBuildStatus()
-                + "\n\nVulkan check will run when the Android surface is ready."
-                + "\nThis is not yet a playable game port.");
+                + "\n\nWaiting for Android display surface.\n"
+                + "This foundation is not yet a playable GTA V port.");
         layout.addView(statusView, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -53,23 +56,61 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         surfaceView.getHolder().addCallback(this);
         layout.addView(surfaceView, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f));
-
         setContentView(layout);
     }
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        statusView.setText(nativeInitVulkan(holder.getSurface())
-                + "\n\nVulkan surface probe only — game rendering is not integrated yet.");
+        // Initialize after surfaceChanged provides the actual drawable dimensions.
     }
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-        // The game renderer will consume surface dimensions once it is integrated.
+        stopRenderLoop();
+        nativeShutdownVulkan();
+        String status = nativeInitVulkan(holder.getSurface());
+        statusView.setText(status);
+        if (status.startsWith("Vulkan swapchain ready.")) {
+            startRenderLoop();
+        }
+    }
+
+    private void startRenderLoop() {
+        renderRequested = true;
+        renderThread = new Thread(() -> {
+            while (renderRequested) {
+                boolean rendered = nativeRenderFrame();
+                if (!rendered) {
+                    // Avoid a hot loop if Android invalidates the surface or the GPU reports an error.
+                    try {
+                        Thread.sleep(16L);
+                    } catch (InterruptedException ignored) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+        }, "GTA5-Vulkan-Render");
+        renderThread.start();
+    }
+
+    private void stopRenderLoop() {
+        renderRequested = false;
+        Thread thread = renderThread;
+        renderThread = null;
+        if (thread != null && thread != Thread.currentThread()) {
+            thread.interrupt();
+            try {
+                thread.join(1500L);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
+        stopRenderLoop();
         nativeShutdownVulkan();
         if (statusView != null) {
             statusView.setText("Android surface closed. Vulkan resources released.");
@@ -77,7 +118,15 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     }
 
     @Override
+    protected void onPause() {
+        stopRenderLoop();
+        nativeShutdownVulkan();
+        super.onPause();
+    }
+
+    @Override
     protected void onDestroy() {
+        stopRenderLoop();
         nativeShutdownVulkan();
         super.onDestroy();
     }
