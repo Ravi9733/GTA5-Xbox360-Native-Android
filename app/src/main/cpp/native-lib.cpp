@@ -7,9 +7,28 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include <memory>
+#include <unordered_map>
+#include <cstdint>
 
 namespace {
 std::mutex g_mutex;
+struct SafFileHandle {
+    jobject file = nullptr;
+    jmethodID lengthMethod = nullptr;
+    jmethodID readAtMethod = nullptr;
+    jmethodID closeMethod = nullptr;
+    std::mutex mutex;
+};
+std::mutex g_safFilesMutex;
+std::unordered_map<jlong, std::shared_ptr<SafFileHandle>> g_safFiles;
+jlong g_nextSafHandle = 1;
+
+std::shared_ptr<SafFileHandle> findSafFile(jlong handle) {
+    std::lock_guard<std::mutex> lock(g_safFilesMutex);
+    const auto it = g_safFiles.find(handle);
+    return it == g_safFiles.end() ? nullptr : it->second;
+}
 VkInstance g_instance = VK_NULL_HANDLE;
 VkSurfaceKHR g_surface = VK_NULL_HANDLE;
 VkPhysicalDevice g_physicalDevice = VK_NULL_HANDLE;
@@ -452,4 +471,99 @@ Java_com_gta5_nativeandroid_MainActivity_nativeInspectDocument(
     env->DeleteLocalRef(file);
     env->DeleteLocalRef(fileClass);
     return env->NewStringUTF(result.c_str());
+}
+
+
+// Native seekable-file bridge for the future SanRecomp filesystem adapter.
+// Handles are opaque IDs, not raw pointers, so stale/unknown handles are rejected.
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_gta5_nativeandroid_MainActivity_nativeOpenDocument(
+        JNIEnv* env, jobject, jobject resolver, jobject uri) {
+    if (resolver == nullptr || uri == nullptr) return 0;
+    jclass fileClass = env->FindClass("com/gta5/nativeandroid/SafRandomAccessFile");
+    if (fileClass == nullptr) { env->ExceptionClear(); return 0; }
+    jmethodID openMethod = env->GetStaticMethodID(fileClass, "open",
+            "(Landroid/content/ContentResolver;Landroid/net/Uri;)Lcom/gta5/nativeandroid/SafRandomAccessFile;");
+    jmethodID lengthMethod = env->GetMethodID(fileClass, "length", "()J");
+    jmethodID readAtMethod = env->GetMethodID(fileClass, "readAt", "(J[BII)I");
+    jmethodID closeMethod = env->GetMethodID(fileClass, "close", "()V");
+    if (!openMethod || !lengthMethod || !readAtMethod || !closeMethod) {
+        env->ExceptionClear(); env->DeleteLocalRef(fileClass); return 0;
+    }
+    jobject localFile = env->CallStaticObjectMethod(fileClass, openMethod, resolver, uri);
+    if (env->ExceptionCheck() || localFile == nullptr) {
+        env->ExceptionClear(); env->DeleteLocalRef(fileClass); return 0;
+    }
+    auto state = std::make_shared<SafFileHandle>();
+    state->file = env->NewGlobalRef(localFile);
+    state->lengthMethod = lengthMethod;
+    state->readAtMethod = readAtMethod;
+    state->closeMethod = closeMethod;
+    env->DeleteLocalRef(localFile);
+    env->DeleteLocalRef(fileClass);
+    if (state->file == nullptr) return 0;
+    std::lock_guard<std::mutex> lock(g_safFilesMutex);
+    const jlong handle = g_nextSafHandle++;
+    g_safFiles.emplace(handle, std::move(state));
+    return handle;
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_gta5_nativeandroid_MainActivity_nativeDocumentLength(JNIEnv* env, jobject, jlong handle) {
+    auto state = findSafFile(handle);
+    if (!state) return -1;
+    std::lock_guard<std::mutex> lock(state->mutex);
+    jlong length = env->CallLongMethod(state->file, state->lengthMethod);
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return -1; }
+    return length;
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_com_gta5_nativeandroid_MainActivity_nativeReadDocumentAt(
+        JNIEnv* env, jobject, jlong handle, jlong offset, jint requestedLength) {
+    if (offset < 0 || requestedLength < 0 || requestedLength > 16 * 1024 * 1024) return nullptr;
+    auto state = findSafFile(handle);
+    if (!state) return nullptr;
+    std::lock_guard<std::mutex> lock(state->mutex);
+    jbyteArray result = env->NewByteArray(requestedLength);
+    if (result == nullptr) return nullptr;
+    jint count = env->CallIntMethod(state->file, state->readAtMethod,
+            offset, result, 0, requestedLength);
+    if (env->ExceptionCheck() || count < 0) {
+        env->ExceptionClear(); env->DeleteLocalRef(result); return nullptr;
+    }
+    if (count != requestedLength) {
+        jbyteArray trimmed = env->NewByteArray(std::max(0, count));
+        if (trimmed != nullptr && count > 0) {
+            env->SetByteArrayRegion(trimmed, 0, count, nullptr);
+            if (env->ExceptionCheck()) env->ExceptionClear();
+            // Copy from the original result through a temporary buffer to avoid JNI array aliasing.
+            std::vector<jbyte> bytes(static_cast<size_t>(count));
+            env->GetByteArrayRegion(result, 0, count, bytes.data());
+            if (!env->ExceptionCheck()) env->SetByteArrayRegion(trimmed, 0, count, bytes.data());
+            if (env->ExceptionCheck()) env->ExceptionClear();
+        }
+        env->DeleteLocalRef(result);
+        return trimmed;
+    }
+    return result;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_gta5_nativeandroid_MainActivity_nativeCloseDocument(JNIEnv* env, jobject, jlong handle) {
+    std::shared_ptr<SafFileHandle> state;
+    {
+        std::lock_guard<std::mutex> lock(g_safFilesMutex);
+        const auto it = g_safFiles.find(handle);
+        if (it == g_safFiles.end()) return;
+        state = it->second;
+        g_safFiles.erase(it);
+    }
+    std::lock_guard<std::mutex> lock(state->mutex);
+    if (state->file != nullptr) {
+        env->CallVoidMethod(state->file, state->closeMethod);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        env->DeleteGlobalRef(state->file);
+        state->file = nullptr;
+    }
 }
