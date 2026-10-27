@@ -170,8 +170,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             runOnUiThread(() -> {
                 String report = "Folder scan: " + scanned + " entries checked\n"
                         + "default.xex: " + (hasXex ? xexCheck : "not found") + "\n"
-                        + "xbox360.rpf: " + (hasRpf ? rpfCheck : "not found") + "\\n"
-                        + "Native file bridge — XEX: " + xexNative + "\\n"
+                        + "xbox360.rpf: " + (hasRpf ? rpfCheck : "not found") + "\n"
+                        + "Native file bridge — XEX: " + xexNative + "\n"
                         + "Native file bridge — RPF: " + rpfNative;
                 if (hasXex && hasRpf) {
                     report += "\nHeader checks completed. This app does not yet load or run the game.";
