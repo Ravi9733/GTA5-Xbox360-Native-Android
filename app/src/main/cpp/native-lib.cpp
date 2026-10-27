@@ -513,6 +513,7 @@ Java_com_gta5_nativeandroid_MainActivity_nativeDocumentLength(JNIEnv* env, jobje
     auto state = findSafFile(handle);
     if (!state) return -1;
     std::lock_guard<std::mutex> lock(state->mutex);
+    if (state->file == nullptr) return -1;
     jlong length = env->CallLongMethod(state->file, state->lengthMethod);
     if (env->ExceptionCheck()) { env->ExceptionClear(); return -1; }
     return length;
@@ -525,6 +526,7 @@ Java_com_gta5_nativeandroid_MainActivity_nativeReadDocumentAt(
     auto state = findSafFile(handle);
     if (!state) return nullptr;
     std::lock_guard<std::mutex> lock(state->mutex);
+    if (state->file == nullptr) return nullptr;
     jbyteArray result = env->NewByteArray(requestedLength);
     if (result == nullptr) return nullptr;
     jint count = env->CallIntMethod(state->file, state->readAtMethod,
@@ -535,8 +537,6 @@ Java_com_gta5_nativeandroid_MainActivity_nativeReadDocumentAt(
     if (count != requestedLength) {
         jbyteArray trimmed = env->NewByteArray(std::max(0, count));
         if (trimmed != nullptr && count > 0) {
-            env->SetByteArrayRegion(trimmed, 0, count, nullptr);
-            if (env->ExceptionCheck()) env->ExceptionClear();
             // Copy from the original result through a temporary buffer to avoid JNI array aliasing.
             std::vector<jbyte> bytes(static_cast<size_t>(count));
             env->GetByteArrayRegion(result, 0, count, bytes.data());
