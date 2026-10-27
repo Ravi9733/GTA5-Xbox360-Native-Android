@@ -39,10 +39,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private native boolean nativeRenderFrame();
     private native void nativeShutdownVulkan();
     private native String nativeInspectDocument(android.content.ContentResolver resolver, Uri documentUri);
-    private native long nativeOpenDocument(android.content.ContentResolver resolver, Uri documentUri);
-    private native long nativeDocumentLength(long handle);
-    private native byte[] nativeReadDocumentAt(long handle, long offset, int requestedLength);
-    private native void nativeCloseDocument(long handle);
+    native long nativeOpenDocument(android.content.ContentResolver resolver, Uri documentUri);
+    native long nativeDocumentLength(long handle);
+    native byte[] nativeReadDocumentAt(long handle, long offset, int requestedLength);
+    native void nativeCloseDocument(long handle);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -196,17 +196,16 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     // A SAF Uri is not a POSIX path, and this header check still does not load or mount the game.
     private String inspectMagic(Uri documentUri, byte[] expected) {
         if (documentUri == null) return "not found";
-        try (SafRandomAccessFile file = SafRandomAccessFile.open(getContentResolver(), documentUri)) {
+        try (NativeGameFile file = NativeGameFile.open(this, documentUri)) {
             if (file.length() < expected.length) return "found, too short to validate";
-            byte[] header = new byte[expected.length];
-            int count = file.readAt(0, header, 0, header.length);
-            if (count != expected.length) return "found, too short to validate";
+            byte[] header = file.readAt(0, expected.length);
+            if (header.length != expected.length) return "found, too short to validate";
             for (int i = 0; i < expected.length; i++) {
                 if (header[i] != expected[i]) return "readable, unexpected header";
             }
-            return "readable, header OK";
+            return "native random-access read OK";
         } catch (Exception ex) {
-            return "found, read failed (" + ex.getClass().getSimpleName() + ")";
+            return "found, native read failed (" + ex.getClass().getSimpleName() + ")";
         }
     }
 
