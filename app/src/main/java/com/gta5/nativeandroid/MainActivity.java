@@ -39,6 +39,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private native boolean nativeRenderFrame();
     private native void nativeShutdownVulkan();
     private native String nativeInspectDocument(android.content.ContentResolver resolver, Uri documentUri);
+    private native long nativeOpenDocument(android.content.ContentResolver resolver, Uri documentUri);
+    private native long nativeDocumentLength(long handle);
+    private native byte[] nativeReadDocumentAt(long handle, long offset, int requestedLength);
+    private native void nativeCloseDocument(long handle);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
