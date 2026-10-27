@@ -38,6 +38,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     private native String nativeInitVulkan(Surface surface);
     private native boolean nativeRenderFrame();
     private native void nativeShutdownVulkan();
+    private native String nativeInspectDocument(android.content.ContentResolver resolver, Uri documentUri);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -163,11 +164,15 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             final boolean hasRpf = xbox360RpfUri != null;
             final String xexCheck = inspectMagic(defaultXexUri, new byte[]{'X','E','X','2'});
             final String rpfCheck = inspectMagic(xbox360RpfUri, new byte[]{'R','P','F','7'});
+            final String xexNative = hasXex ? nativeInspectDocument(getContentResolver(), defaultXexUri) : "not found";
+            final String rpfNative = hasRpf ? nativeInspectDocument(getContentResolver(), xbox360RpfUri) : "not found";
             final int scanned = visited;
             runOnUiThread(() -> {
                 String report = "Folder scan: " + scanned + " entries checked\n"
                         + "default.xex: " + (hasXex ? xexCheck : "not found") + "\n"
-                        + "xbox360.rpf: " + (hasRpf ? rpfCheck : "not found");
+                        + "xbox360.rpf: " + (hasRpf ? rpfCheck : "not found") + "\\n"
+                        + "Native file bridge — XEX: " + xexNative + "\\n"
+                        + "Native file bridge — RPF: " + rpfNative;
                 if (hasXex && hasRpf) {
                     report += "\nHeader checks completed. This app does not yet load or run the game.";
                 } else if (scanned >= 12000) {
