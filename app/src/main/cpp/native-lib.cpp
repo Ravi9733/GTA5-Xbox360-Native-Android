@@ -385,3 +385,71 @@ Java_com_gta5_nativeandroid_MainActivity_nativeShutdownVulkan(JNIEnv*, jobject) 
     std::lock_guard<std::mutex> lock(g_mutex);
     shutdownVulkanLocked();
 }
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_gta5_nativeandroid_MainActivity_nativeInspectDocument(
+        JNIEnv* env, jobject, jobject resolver, jobject uri) {
+    if (resolver == nullptr || uri == nullptr) {
+        return env->NewStringUTF("native SAF read unavailable: missing resolver or URI");
+    }
+    jclass fileClass = env->FindClass("com/gta5/nativeandroid/SafRandomAccessFile");
+    if (fileClass == nullptr) {
+        env->ExceptionClear();
+        return env->NewStringUTF("native SAF read failed: class lookup");
+    }
+    jmethodID openMethod = env->GetStaticMethodID(fileClass, "open",
+            "(Landroid/content/ContentResolver;Landroid/net/Uri;)Lcom/gta5/nativeandroid/SafRandomAccessFile;");
+    jmethodID lengthMethod = env->GetMethodID(fileClass, "length", "()J");
+    jmethodID readAtMethod = env->GetMethodID(fileClass, "readAt", "(J[BII)I");
+    jmethodID closeMethod = env->GetMethodID(fileClass, "close", "()V");
+    if (openMethod == nullptr || lengthMethod == nullptr || readAtMethod == nullptr || closeMethod == nullptr) {
+        env->ExceptionClear();
+        env->DeleteLocalRef(fileClass);
+        return env->NewStringUTF("native SAF read failed: method lookup");
+    }
+    jobject file = env->CallStaticObjectMethod(fileClass, openMethod, resolver, uri);
+    if (env->ExceptionCheck() || file == nullptr) {
+        env->ExceptionClear();
+        env->DeleteLocalRef(fileClass);
+        return env->NewStringUTF("native SAF read failed: open");
+    }
+    jlong fileLength = env->CallLongMethod(file, lengthMethod);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        env->CallVoidMethod(file, closeMethod);
+        env->DeleteLocalRef(file);
+        env->DeleteLocalRef(fileClass);
+        return env->NewStringUTF("native SAF read failed: length");
+    }
+    jbyteArray header = env->NewByteArray(8);
+    jint count = env->CallIntMethod(file, readAtMethod, static_cast<jlong>(0), header, 0, 8);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        env->CallVoidMethod(file, closeMethod);
+        env->DeleteLocalRef(header);
+        env->DeleteLocalRef(file);
+        env->DeleteLocalRef(fileClass);
+        return env->NewStringUTF("native SAF read failed: readAt");
+    }
+    std::string result = "native SAF: " + std::to_string(static_cast<long long>(fileLength)) + " bytes; header=";
+    if (count <= 0) {
+        result += "(empty)";
+    } else {
+        jbyte bytes[8]{};
+        env->GetByteArrayRegion(header, 0, count, bytes);
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        static const char digits[] = "0123456789ABCDEF";
+        for (jint i = 0; i < count; ++i) {
+            unsigned char value = static_cast<unsigned char>(bytes[i]);
+            if (i != 0) result += ' ';
+            result += digits[(value >> 4) & 0x0F];
+            result += digits[value & 0x0F];
+        }
+    }
+    env->CallVoidMethod(file, closeMethod);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(header);
+    env->DeleteLocalRef(file);
+    env->DeleteLocalRef(fileClass);
+    return env->NewStringUTF(result.c_str());
+}
